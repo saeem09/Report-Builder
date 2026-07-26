@@ -1,12 +1,71 @@
 """In-memory builders for real test documents.
 
 Test inputs are generated with the same libraries that parse them, so the
-suite is self-contained and needs no checked-in binary fixture files.
+suite is self-contained and needs no checked-in binary fixture files. The
+PDF constants are minimal hand-written PDF literals, which avoids adding a
+PDF-writing library that production code would never use.
 """
 
 import io
 
 from docx import Document
+
+SINGLE_PAGE_PDF_BYTES = b"""%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 49 >>
+stream
+BT /F1 24 Tf 72 720 Td (Sprint review notes) Tj ET
+endstream
+endobj
+trailer
+<< /Size 6 /Root 1 0 R >>
+%%EOF
+"""
+
+TWO_PAGE_PDF_BYTES = b"""%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 49 >>
+stream
+BT /F1 24 Tf 72 720 Td (Sprint review notes) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 42 >>
+stream
+BT /F1 24 Tf 72 720 Td (Action items) Tj ET
+endstream
+endobj
+trailer
+<< /Size 8 /Root 1 0 R >>
+%%EOF
+"""
 
 
 def build_docx_bytes(paragraphs, table_rows=()):
