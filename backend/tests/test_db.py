@@ -17,3 +17,31 @@ def test_init_db_creates_expected_tables(tmp_path: Path) -> None:
         conn.close()
 
     assert {"reports", "report_fields", "diagrams", "files"}.issubset(table_names)
+
+
+def test_deleting_report_cascades_to_report_fields(tmp_path: Path) -> None:
+    db_path = tmp_path / "test.db"
+    init_db(db_path)
+
+    conn = get_connection(db_path)
+    try:
+        conn.execute(
+            "INSERT INTO reports (id, name, logo_file_id, created_at, updated_at) "
+            "VALUES ('report-1', 'Test Report', NULL, '2026-01-01', '2026-01-01')"
+        )
+        conn.execute(
+            "INSERT INTO report_fields (id, report_id, label, content, sort_order) "
+            "VALUES ('field-1', 'report-1', 'Summary', '', 0)"
+        )
+        conn.commit()
+
+        conn.execute("DELETE FROM reports WHERE id = 'report-1'")
+        conn.commit()
+
+        remaining = conn.execute(
+            "SELECT COUNT(*) AS count FROM report_fields WHERE report_id = 'report-1'"
+        ).fetchone()
+    finally:
+        conn.close()
+
+    assert remaining["count"] == 0
