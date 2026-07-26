@@ -6,10 +6,12 @@ from llm_doubles import (
     build_anthropic_error,
     build_text_only_message,
     build_tool_use_message,
+    build_truncated_tool_use_message,
 )
 
 from app.llm.client import (
     API_KEY_ENVIRONMENT_VARIABLE,
+    CACHE_CONTROL_EPHEMERAL,
     DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
     ClaudeClient,
@@ -23,6 +25,11 @@ TOOL = {"name": "demo_tool", "description": "d", "input_schema": {"type": "objec
 
 def test_default_model_is_the_cheapest_capable_model():
     assert DEFAULT_MODEL == "claude-haiku-4-5-20251001"
+
+
+def test_cache_control_ephemeral_is_immutable():
+    with pytest.raises(TypeError):
+        CACHE_CONTROL_EPHEMERAL["type"] = "poisoned"
 
 
 def test_build_cached_system_blocks_marks_the_block_ephemeral():
@@ -161,3 +168,24 @@ def test_extract_tool_input_rejects_a_non_object_input():
 
     with pytest.raises(LLMResponseError):
         extract_tool_input(message, "demo_tool")
+
+
+def test_extract_tool_input_rejects_a_response_truncated_by_max_tokens():
+    message = build_truncated_tool_use_message("demo_tool", {"fields": []})
+
+    with pytest.raises(LLMResponseError) as error_info:
+        extract_tool_input(message, "demo_tool")
+
+    assert "truncated" in str(error_info.value).lower()
+
+
+def test_request_tool_call_rejects_a_response_truncated_by_max_tokens():
+    api_client = FakeAnthropicClient(
+        response=build_truncated_tool_use_message("demo_tool", {"fields": []})
+    )
+    client = ClaudeClient(api_client=api_client)
+
+    with pytest.raises(LLMResponseError) as error_info:
+        client.request_tool_call("sys", "user", TOOL, "demo_tool")
+
+    assert "truncated" in str(error_info.value).lower()

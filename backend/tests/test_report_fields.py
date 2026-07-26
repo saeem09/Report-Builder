@@ -169,6 +169,50 @@ def test_blank_source_text_raises_value_error():
         generate_report_fields("   \n ", ["Summary"], client=client)
 
 
+@pytest.mark.parametrize("bad_source_text", [None, 123, ["notes"], {"a": 1}])
+def test_non_string_source_text_raises_value_error(bad_source_text):
+    client, api_client = make_client([])
+
+    with pytest.raises(ValueError):
+        generate_report_fields(bad_source_text, ["Summary"], client=client)
+
+    assert api_client.messages.calls == []
+
+
+def test_bare_string_field_labels_raises_value_error_instead_of_calling_claude():
+    client, api_client = make_client([])
+
+    with pytest.raises(ValueError):
+        generate_report_fields(SOURCE, "Summary", client=client)
+
+    assert api_client.messages.calls == []
+
+
+@pytest.mark.parametrize("bad_field_labels", [123, {"Summary": 1}, None, 4.5])
+def test_non_list_field_labels_raises_value_error(bad_field_labels):
+    client, api_client = make_client([])
+
+    with pytest.raises(ValueError):
+        generate_report_fields(SOURCE, bad_field_labels, client=client)
+
+    assert api_client.messages.calls == []
+
+
+@pytest.mark.parametrize("bad_labels", [[123], ["Summary", None], [1.5, "Blockers"]])
+def test_field_labels_with_a_non_string_element_raises_value_error(bad_labels):
+    client, api_client = make_client([])
+
+    with pytest.raises(ValueError):
+        generate_report_fields(SOURCE, bad_labels, client=client)
+
+    assert api_client.messages.calls == []
+
+
+def test_report_field_tool_is_immutable():
+    with pytest.raises(TypeError):
+        REPORT_FIELD_TOOL["name"] = "poisoned"
+
+
 def test_tool_schema_requires_label_and_content_strings():
     items = REPORT_FIELD_TOOL["input_schema"]["properties"]["fields"]["items"]
 

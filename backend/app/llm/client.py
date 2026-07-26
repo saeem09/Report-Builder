@@ -6,6 +6,7 @@ language synthesis and default to the cheapest capable model.
 """
 
 import os
+from types import MappingProxyType
 from typing import Any, Dict, List, Optional
 
 import anthropic
@@ -15,7 +16,7 @@ from .errors import LLMConfigurationError, LLMRequestError, LLMResponseError
 API_KEY_ENVIRONMENT_VARIABLE = "ANTHROPIC_API_KEY"
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_MAX_TOKENS = 4096
-CACHE_CONTROL_EPHEMERAL = {"type": "ephemeral"}
+CACHE_CONTROL_EPHEMERAL = MappingProxyType({"type": "ephemeral"})
 
 
 def build_cached_system_blocks(system_prompt: str) -> List[Dict[str, Any]]:
@@ -38,7 +39,11 @@ def extract_tool_input(message: Any, tool_name: str) -> Dict[str, Any]:
     """Return the input of the named tool call in a Claude response.
 
     The caller forces this tool via tool_choice, so a response without it means
-    something went structurally wrong and is not recoverable here.
+    something went structurally wrong and is not recoverable here. A response
+    that hit the max_tokens ceiling mid-tool-call is also rejected: the tool
+    input Claude managed to emit before being cut off would otherwise be used
+    as-is, and downstream reconciliation logic cannot distinguish a truncated
+    entry from Claude legitimately having nothing to say for a field.
     """
     for block in getattr(message, "content", ()) or ():
         if getattr(block, "type", None) != "tool_use":
@@ -51,6 +56,11 @@ def extract_tool_input(message: Any, tool_name: str) -> Dict[str, Any]:
                 "Claude returned a {0!r} tool call with a non-object input.".format(
                     tool_name
                 )
+            )
+        if getattr(message, "stop_reason", None) == "max_tokens":
+            raise LLMResponseError(
+                "Claude's response was truncated by the max_tokens limit "
+                "before the {0!r} tool call finished.".format(tool_name)
             )
         return tool_input
     raise LLMResponseError(

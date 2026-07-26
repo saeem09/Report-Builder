@@ -31,6 +31,30 @@ def build_tool_use_message(tool_name: str, tool_input: Dict[str, Any]) -> Messag
     )
 
 
+def build_truncated_tool_use_message(
+    tool_name: str, tool_input: Dict[str, Any]
+) -> Message:
+    """Build the response Claude returns when max_tokens cuts off a tool call.
+
+    The content still carries a matching tool_use block (Claude was mid-call
+    when the token ceiling hit), but stop_reason is "max_tokens" instead of
+    "tool_use", signalling the emitted input may be incomplete.
+    """
+    return Message(
+        id="msg_test_truncated_tool_use",
+        content=[
+            ToolUseBlock(
+                id="toolu_test", input=tool_input, name=tool_name, type="tool_use"
+            )
+        ],
+        model=MOCK_MODEL,
+        role="assistant",
+        stop_reason="max_tokens",
+        type="message",
+        usage=Usage(input_tokens=100, output_tokens=4096),
+    )
+
+
 def build_text_only_message(text: str = "I cannot help with that.") -> Message:
     """Build a response with prose and no tool call at all."""
     return Message(

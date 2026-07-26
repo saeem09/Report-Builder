@@ -5,6 +5,7 @@ rule in AGENTS.md. Structured output is obtained by forcing a tool call rather
 than parsing prose, so the label-to-content mapping is reliable.
 """
 
+from types import MappingProxyType
 from typing import Any, Dict, List, Optional
 
 from .client import ClaudeClient
@@ -12,7 +13,7 @@ from .prompts import REPORT_FIELD_SYSTEM_PROMPT, build_report_field_prompt
 
 REPORT_FIELD_TOOL_NAME = "record_report_fields"
 
-REPORT_FIELD_TOOL = {
+REPORT_FIELD_TOOL = MappingProxyType({
     "name": REPORT_FIELD_TOOL_NAME,
     "description": (
         "Record the drafted content for every requested progress report field. "
@@ -51,7 +52,31 @@ REPORT_FIELD_TOOL = {
         },
         "required": ["fields"],
     },
-}
+})
+
+
+def _validate_inputs(source_text: Any, field_labels: Any) -> None:
+    """Reject shapes generate_report_fields cannot safely process.
+
+    Raises ValueError when source_text is not a string, is blank, when
+    field_labels is a bare string (a plausible caller mistake: a string is
+    iterable over single characters, so it would otherwise silently pass
+    through as a list of one-character labels and trigger a real, billable
+    Claude call with garbage labels), when field_labels is not a list/tuple,
+    or when any element of field_labels is not a string.
+    """
+    if not isinstance(source_text, str):
+        raise ValueError("source_text must be a string.")
+    if not source_text.strip():
+        raise ValueError("source_text must contain non-whitespace characters.")
+    if isinstance(field_labels, str):
+        raise ValueError(
+            "field_labels must be a list or tuple of strings, not a bare string."
+        )
+    if not isinstance(field_labels, (list, tuple)):
+        raise ValueError("field_labels must be a list or tuple of strings.")
+    if not all(isinstance(label, str) for label in field_labels):
+        raise ValueError("Every element of field_labels must be a string.")
 
 
 def _unique_labels(field_labels: List[str]) -> List[str]:
@@ -101,12 +126,14 @@ def generate_report_fields(
     Claude call is made, covering all labels at once. Passing no labels returns
     an empty dict without calling Claude at all.
 
-    Raises ValueError when source_text is blank, LLMConfigurationError when the
-    API key is missing, LLMRequestError when the API call fails, and
-    LLMResponseError when Claude does not return the forced tool call.
+    Raises ValueError when source_text is not a string or is blank, when
+    field_labels is not a list/tuple (a bare string included, since it is
+    otherwise silently iterable into single-character labels) or contains a
+    non-string element, LLMConfigurationError when the API key is missing,
+    LLMRequestError when the API call fails, and LLMResponseError when Claude
+    does not return the forced tool call.
     """
-    if not source_text.strip():
-        raise ValueError("source_text must contain non-whitespace characters.")
+    _validate_inputs(source_text, field_labels)
     requested = _unique_labels([label for label in field_labels if label.strip()])
     if not requested:
         return {}
