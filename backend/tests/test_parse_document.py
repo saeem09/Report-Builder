@@ -54,5 +54,23 @@ def test_unsupported_file_type_error_is_a_document_parse_error():
     assert issubclass(UnsupportedFileTypeError, DocumentParseError)
 
 
+def test_parse_document_passes_through_a_parsers_own_document_parse_error():
+    # Invalid UTF-8 bytes make parse_txt raise its own specific
+    # DocumentParseError. The dispatcher's catch-all must not swallow or
+    # rewrap an error a parser already converted deliberately - it should
+    # pass through unchanged.
+    with pytest.raises(DocumentParseError) as error_info:
+        parse_document(b"\xff\xfe\x00\x81", "notes.txt")
+
+    assert "Could not decode the .txt file as UTF-8 text." in str(error_info.value)
+
+
 def test_supported_extensions_lists_the_four_input_formats():
     assert SUPPORTED_EXTENSIONS == (".docx", ".html", ".pdf", ".txt")
+
+
+def test_parsers_by_extension_is_immutable():
+    from app.parsers import PARSERS_BY_EXTENSION
+
+    with pytest.raises(TypeError):
+        PARSERS_BY_EXTENSION[".evil"] = None

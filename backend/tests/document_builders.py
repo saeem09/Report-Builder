@@ -68,6 +68,28 @@ trailer
 """
 
 
+NO_TEXT_PDF_BYTES = b"""%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 0 >>
+stream
+
+endstream
+endobj
+trailer
+<< /Size 6 /Root 1 0 R >>
+%%EOF
+"""
+
+
 def build_docx_bytes(paragraphs, table_rows=()):
     """Build a .docx file in memory.
 
