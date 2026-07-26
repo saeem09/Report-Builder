@@ -11,7 +11,7 @@ def _sanitize_name(original_name: str) -> str:
     final path segment. Rejects names that sanitize down to nothing.
     """
     sanitized = Path(original_name).name
-    if sanitized == "" or sanitized == ".":
+    if sanitized == "" or sanitized == "." or sanitized == "..":
         raise ValueError(f"Invalid file name: {original_name!r}")
     return sanitized
 

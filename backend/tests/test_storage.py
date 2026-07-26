@@ -37,3 +37,11 @@ def test_save_file_rejects_empty_sanitized_name(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError):
         save_file(b"x", ".", uploads_dir=tmp_path)
+
+
+def test_save_file_rejects_dot_dot_sanitized_name(tmp_path: Path) -> None:
+    with pytest.raises(ValueError):
+        save_file(b"x", "..", uploads_dir=tmp_path)
+
+    with pytest.raises(ValueError):
+        save_file(b"x", "../..", uploads_dir=tmp_path)
