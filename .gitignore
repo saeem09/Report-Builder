@@ -1,0 +1,22 @@
+# Node
+node_modules/
+dist/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Editor / OS
+.DS_Store
+
+# Environment
+.env
+.env.local
+
+# Generated app data (folder structure kept via .gitkeep, contents ignored)
+data/app.db
+data/uploads/*
+!data/uploads/.gitkeep
