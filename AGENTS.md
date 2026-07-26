@@ -16,7 +16,7 @@ MVP scope: no user accounts, single local user, dev-server only (no deployment t
 - A list page for generated reports and diagrams, filterable by name or date
 - Process flow diagrams are fully editable in-app: actors, decisions, text, box position
 - Company logos can be uploaded and appear in exported outputs
-- Input formats: Word, TXT, Excel, PDF, HTML
+- Input formats: Word, TXT, PDF, HTML
 - Output formats: HTML (diagrams), PDF (reports) — both include the company logo
 - UI/UX priority: sleek, modern, elegant; blues/greys/blacks/whites only (palette below)
 
@@ -40,7 +40,7 @@ No monorepo tooling; each app manages its own dependencies (npm in frontend/, pi
 
 **Backend**
 - Python + FastAPI
-- python-docx, openpyxl, pdfplumber, BeautifulSoup4 for document parsing (Word/Excel/PDF/HTML/TXT) — parsing never touches the LLM
+- python-docx, pdfplumber, BeautifulSoup4 for document parsing (Word/PDF/HTML/TXT) — parsing never touches the LLM
 - sqlite3 for storage (reports, diagrams, field content, file metadata)
 - Anthropic Python SDK for the LLM step (see AI / Token-Cost Discipline)
 - WeasyPrint for rendering the report view to PDF
