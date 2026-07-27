@@ -15,6 +15,10 @@ from . import fields as fields_repo
 from . import repository
 from .dependencies import get_db_path, open_db
 from .schemas import (
+    FieldContentRequest,
+    FieldCreateRequest,
+    FieldOrderRequest,
+    FieldResponse,
     ReportCreateRequest,
     ReportDetailResponse,
     ReportListResponse,
@@ -84,4 +88,66 @@ def delete_report(report_id: str, db_path: Path = Depends(get_db_path)) -> Respo
     """Delete a report. Its fields and source documents cascade away with it."""
     with open_db(db_path) as conn:
         repository.delete_report(conn, report_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/{report_id}/fields",
+    status_code=status.HTTP_201_CREATED,
+    response_model=FieldResponse,
+)
+def add_field(
+    report_id: str,
+    payload: FieldCreateRequest,
+    db_path: Path = Depends(get_db_path),
+) -> Dict[str, Any]:
+    """Append one empty field to a report."""
+    with open_db(db_path) as conn:
+        return fields_repo.add_field(conn, report_id, payload.label)
+
+
+@router.put("/{report_id}/fields/order", response_model=ReportDetailResponse)
+def reorder_fields(
+    report_id: str,
+    payload: FieldOrderRequest,
+    db_path: Path = Depends(get_db_path),
+) -> Dict[str, Any]:
+    """Persist a drag-and-drop reorder.
+
+    The client sends the complete field id list in its new order. Sending the
+    whole list rather than a single moved id makes the request idempotent and
+    lets the server reject any order that does not match the report exactly.
+    """
+    with open_db(db_path) as conn:
+        fields_repo.reorder_fields(conn, report_id, payload.field_ids)
+        return build_report_detail(conn, report_id)
+
+
+@router.patch("/{report_id}/fields/{field_id}", response_model=FieldResponse)
+def update_field_content(
+    report_id: str,
+    field_id: str,
+    payload: FieldContentRequest,
+    db_path: Path = Depends(get_db_path),
+) -> Dict[str, Any]:
+    """Save a manual edit.
+
+    This is the only endpoint that sets is_user_edited, which is what stops
+    the generation endpoint from ever overwriting the user's own words.
+    """
+    with open_db(db_path) as conn:
+        return fields_repo.update_field_content(
+            conn, report_id, field_id, payload.content
+        )
+
+
+@router.delete(
+    "/{report_id}/fields/{field_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_field(
+    report_id: str, field_id: str, db_path: Path = Depends(get_db_path)
+) -> Response:
+    """Remove one field from a report."""
+    with open_db(db_path) as conn:
+        fields_repo.delete_field(conn, report_id, field_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
