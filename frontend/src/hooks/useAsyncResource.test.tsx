@@ -108,7 +108,12 @@ describe('useAsyncResource', () => {
     expect(load).toHaveBeenCalledTimes(callsAfterLoad)
   })
 
-  it('ignores a result that arrives after unmount', async () => {
+  it('does not throw when a fetch resolves after unmount', async () => {
+    // React removed the "state update on an unmounted component" warning in
+    // React 18, so there is nothing to assert about a warning here. What
+    // this test does prove: the isCurrent guard means the late resolution is
+    // silently ignored rather than throwing or logging an error.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     let resolveLoad: (value: string) => void = () => {}
     const { unmount } = renderHarness(
       () =>
@@ -122,8 +127,93 @@ describe('useAsyncResource', () => {
       resolveLoad('late')
     })
 
-    // No "state update on an unmounted component" warning and no throw is the
-    // assertion here; the guard inside the effect is what prevents it.
-    expect(true).toBe(true)
+    expect(consoleError).not.toHaveBeenCalled()
+    consoleError.mockRestore()
+  })
+
+  it('discards a stale response when reload fires before the first fetch resolves', async () => {
+    const resolvers: Array<(value: string) => void> = []
+    const load = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolvers.push(resolve)
+        }),
+    )
+    // Rendered without StrictMode: this test asserts something about the
+    // exact number and order of loader invocations, and StrictMode's
+    // dev-only double-invocation would only add noise to that count. The
+    // StrictMode-safety concern is already covered by the dedicated test
+    // above.
+    render(<Harness load={load} />)
+    const user = userEvent.setup()
+
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(1))
+
+    await user.click(screen.getByRole('button', { name: 'Reload' }))
+
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
+    expect(resolvers).toHaveLength(2)
+
+    // Resolve the newer (second) fetch first, so a real out-of-order race
+    // exists: at this point the first fetch is still pending.
+    await act(async () => {
+      resolvers[1]('second')
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('status')).toHaveTextContent('ready')
+    })
+    expect(screen.getByTestId('data')).toHaveTextContent('second')
+
+    // Now let the stale first fetch resolve. If the isCurrent guard were
+    // broken, this would clobber the fresh 'second' value.
+    await act(async () => {
+      resolvers[0]('first')
+    })
+    expect(screen.getByTestId('data')).toHaveTextContent('second')
+    expect(screen.getByTestId('status')).toHaveTextContent('ready')
+  })
+
+  it('discards a stale response when the load identity changes before the first fetch resolves', async () => {
+    const resolvers: Array<(value: string) => void> = []
+    const firstLoad = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolvers.push(resolve)
+        }),
+    )
+    const secondLoad = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolvers.push(resolve)
+        }),
+    )
+    // Rendered without StrictMode for the same reason as the reload race
+    // test above: precise control over how many times each loader ran.
+    const { rerender } = render(<Harness load={firstLoad} />)
+
+    await waitFor(() => expect(firstLoad).toHaveBeenCalledTimes(1))
+
+    // Simulate switching to a different resource (e.g. a new id) before the
+    // first fetch resolves: the caller passes a new load function identity.
+    rerender(<Harness load={secondLoad} />)
+
+    await waitFor(() => expect(secondLoad).toHaveBeenCalledTimes(1))
+    expect(resolvers).toHaveLength(2)
+
+    // The fresh fetch (for the new load identity) resolves first.
+    await act(async () => {
+      resolvers[1]('fresh')
+    })
+    await waitFor(() => {
+      expect(screen.getByTestId('data')).toHaveTextContent('fresh')
+    })
+
+    // The stale fetch (for the old load identity) resolves after. It must
+    // not overwrite the fresh result.
+    await act(async () => {
+      resolvers[0]('stale')
+    })
+    expect(screen.getByTestId('data')).toHaveTextContent('fresh')
+    expect(screen.getByTestId('status')).toHaveTextContent('ready')
   })
 })
