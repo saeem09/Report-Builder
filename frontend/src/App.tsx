@@ -2,6 +2,7 @@ import { Link, Route, Routes } from 'react-router-dom'
 
 import { CreateReportPage } from './pages/CreateReportPage'
 import { DiagramsListPage } from './pages/DiagramsListPage'
+import { ReportDetailPage } from './pages/ReportDetailPage'
 import { ReportsListPage } from './pages/ReportsListPage'
 
 function App() {
@@ -20,6 +21,7 @@ function App() {
         <Route path="/" element={<p className="px-4">Select Reports or Diagrams to get started.</p>} />
         <Route path="/reports/new" element={<CreateReportPage />} />
         <Route path="/reports" element={<ReportsListPage />} />
+        <Route path="/reports/:reportId" element={<ReportDetailPage />} />
         <Route path="/diagrams" element={<DiagramsListPage />} />
       </Routes>
     </main>
