@@ -5,6 +5,7 @@ import { Link, useParams } from 'react-router-dom'
 import { getReport, reorderFields } from '../api/reports'
 import type { ReportDetail } from '../api/types'
 import { AddFieldForm } from '../components/reports/AddFieldForm'
+import { LogoUploadPanel } from '../components/reports/LogoUploadPanel'
 import { ReportFieldCard } from '../components/reports/ReportFieldCard'
 import { SortableFieldList } from '../components/reports/SortableFieldList'
 import { SourceDocumentPanel } from '../components/reports/SourceDocumentPanel'
@@ -122,6 +123,11 @@ export function ReportDetailPage() {
           <SourceDocumentPanel
             reportId={report.id}
             onGenerated={(generated) => setReport(generated)}
+          />
+
+          <LogoUploadPanel
+            report={report}
+            onUploaded={(updated) => setReport(updated)}
           />
 
           {report.fields.length === 0 ? (
