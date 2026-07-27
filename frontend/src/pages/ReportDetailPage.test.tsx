@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -81,5 +82,37 @@ describe('ReportDetailPage', () => {
       'href',
       '/reports',
     )
+  })
+
+  it('replaces only the saved field in place after an edit', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(reportsApi, 'getReport').mockResolvedValue(
+      makeReport({
+        fields: [
+          makeField('f1', 'Summary', { sort_order: 0 }),
+          makeField('f2', 'Blockers', { content: 'None.', sort_order: 1 }),
+        ],
+      }),
+    )
+    vi.spyOn(reportsApi, 'updateFieldContent').mockResolvedValue(
+      makeField('f1', 'Summary', {
+        content: 'Mine.',
+        sort_order: 0,
+        is_user_edited: true,
+      }),
+    )
+    renderDetailPage()
+
+    await screen.findByRole('heading', { name: 'Kickoff' })
+    await user.type(screen.getByLabelText('Summary content'), 'Mine.')
+    await user.click(screen.getAllByRole('button', { name: 'Save' })[0])
+
+    await waitFor(() => {
+      expect(screen.getByText('Edited by you')).toBeInTheDocument()
+    })
+    expect(screen.getByLabelText('Blockers content')).toHaveValue('None.')
+    expect(
+      screen.getAllByTestId('field-label').map((node) => node.textContent),
+    ).toEqual(['Summary', 'Blockers'])
   })
 })

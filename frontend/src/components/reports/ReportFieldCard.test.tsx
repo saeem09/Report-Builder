@@ -1,0 +1,140 @@
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+import { ApiError } from '../../api/client'
+import * as reportsApi from '../../api/reports'
+import type { ReportField } from '../../api/types'
+import { makeField } from '../../test/fixtures'
+import { ReportFieldCard } from './ReportFieldCard'
+
+function renderCard(field: ReportField, onSaved = vi.fn()) {
+  render(<ReportFieldCard reportId="r1" field={field} onSaved={onSaved} />)
+  return onSaved
+}
+
+describe('ReportFieldCard', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('shows the label and the current content', () => {
+    renderCard(makeField('f1', 'Summary', { content: 'We shipped it.' }))
+
+    expect(screen.getByTestId('field-label')).toHaveTextContent('Summary')
+    expect(screen.getByLabelText('Summary content')).toHaveValue('We shipped it.')
+  })
+
+  it('marks an untouched field with content as an AI draft', () => {
+    renderCard(
+      makeField('f1', 'Summary', { content: 'Drafted.', is_user_edited: false }),
+    )
+
+    expect(screen.getByText('AI draft')).toBeInTheDocument()
+    expect(screen.queryByText('Edited by you')).toBeNull()
+  })
+
+  it('marks a user-edited field as edited by you', () => {
+    renderCard(makeField('f1', 'Summary', { content: 'Mine.', is_user_edited: true }))
+
+    expect(screen.getByText('Edited by you')).toBeInTheDocument()
+    expect(screen.queryByText('AI draft')).toBeNull()
+  })
+
+  it('shows no badge on an empty untouched field', () => {
+    renderCard(makeField('f1', 'Summary', { content: '', is_user_edited: false }))
+
+    expect(screen.queryByText('AI draft')).toBeNull()
+    expect(screen.queryByText('Edited by you')).toBeNull()
+  })
+
+  it('keeps Save disabled until the content changes', async () => {
+    const user = userEvent.setup()
+    renderCard(makeField('f1', 'Summary', { content: 'Draft.' }))
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+
+    await user.type(screen.getByLabelText('Summary content'), '!')
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
+  })
+
+  it('does not call the api while the user is typing', async () => {
+    const user = userEvent.setup()
+    const update = vi.spyOn(reportsApi, 'updateFieldContent')
+    renderCard(makeField('f1', 'Summary'))
+
+    await user.type(screen.getByLabelText('Summary content'), 'typed slowly')
+
+    // Autosave is deliberately absent: PATCH sets is_user_edited permanently,
+    // which excludes the field from all future AI generation.
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('saves on click and hands the updated field up', async () => {
+    const user = userEvent.setup()
+    const saved: ReportField = makeField('f1', 'Summary', {
+      content: 'Mine.',
+      is_user_edited: true,
+    })
+    const update = vi.spyOn(reportsApi, 'updateFieldContent').mockResolvedValue(saved)
+    const onSaved = renderCard(makeField('f1', 'Summary'))
+
+    await user.type(screen.getByLabelText('Summary content'), 'Mine.')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledWith('r1', 'f1', 'Mine.')
+    })
+    expect(onSaved).toHaveBeenCalledWith(saved)
+  })
+
+  it('shows a saving state while the request is in flight', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(reportsApi, 'updateFieldContent').mockReturnValue(new Promise(() => {}))
+    renderCard(makeField('f1', 'Summary'))
+
+    await user.type(screen.getByLabelText('Summary content'), 'x')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled()
+  })
+
+  it('reverts the draft back to the saved content', async () => {
+    const user = userEvent.setup()
+    renderCard(makeField('f1', 'Summary', { content: 'Draft.' }))
+
+    await user.type(screen.getByLabelText('Summary content'), ' changed')
+    await user.click(screen.getByRole('button', { name: 'Revert' }))
+
+    expect(screen.getByLabelText('Summary content')).toHaveValue('Draft.')
+    expect(screen.queryByText('Unsaved changes')).toBeNull()
+  })
+
+  it('surfaces a save failure and keeps the draft', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(reportsApi, 'updateFieldContent').mockRejectedValue(
+      new ApiError(404, 'gone'),
+    )
+    const onSaved = renderCard(makeField('f1', 'Summary'))
+
+    await user.type(screen.getByLabelText('Summary content'), 'Mine.')
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'That report or field no longer exists. Return to the reports list.',
+    )
+    expect(screen.getByLabelText('Summary content')).toHaveValue('Mine.')
+    expect(onSaved).not.toHaveBeenCalled()
+  })
+
+  it('caps content at the server limit of 50000 characters', () => {
+    renderCard(makeField('f1', 'Summary'))
+
+    expect(screen.getByLabelText('Summary content')).toHaveAttribute(
+      'maxLength',
+      '50000',
+    )
+  })
+})

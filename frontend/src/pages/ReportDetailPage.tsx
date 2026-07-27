@@ -3,8 +3,10 @@ import { Link, useParams } from 'react-router-dom'
 
 import { getReport } from '../api/reports'
 import type { ReportDetail } from '../api/types'
+import { ReportFieldCard } from '../components/reports/ReportFieldCard'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { useAsyncResource } from '../hooks/useAsyncResource'
+import { replaceField } from '../lib/reportState'
 
 function formatTimestamp(isoTimestamp: string): string {
   const parsed = new Date(isoTimestamp)
@@ -22,7 +24,12 @@ export function ReportDetailPage() {
   // useCallback is mandatory: useAsyncResource treats load as an effect
   // dependency, so an inline arrow would refetch forever.
   const load = useCallback(() => getReport(reportId), [reportId])
-  const { data: report, status, error } = useAsyncResource<ReportDetail>(load)
+  const {
+    data: report,
+    status,
+    error,
+    setData: setReport,
+  } = useAsyncResource<ReportDetail>(load)
 
   return (
     <section className="px-4 pb-8">
@@ -57,17 +64,13 @@ export function ReportDetailPage() {
               {report.fields.map((field) => (
                 <li
                   key={field.id}
-                  className="rounded-md border border-grey-light bg-white p-4"
+                  className="flex rounded-md border border-grey-light bg-white"
                 >
-                  <h3
-                    data-testid="field-label"
-                    className="font-semibold text-navy-deep"
-                  >
-                    {field.label}
-                  </h3>
-                  <p className="mt-2 whitespace-pre-wrap text-charcoal">
-                    {field.content}
-                  </p>
+                  <ReportFieldCard
+                    reportId={report.id}
+                    field={field}
+                    onSaved={(saved) => setReport(replaceField(report, saved))}
+                  />
                 </li>
               ))}
             </ul>
