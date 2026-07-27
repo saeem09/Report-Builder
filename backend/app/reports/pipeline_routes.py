@@ -12,9 +12,10 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from ..parsers import parse_document
 from ..storage import save_file
 from ..text_cleaning import clean_text
-from . import repository, sources
+from . import generation, repository, sources
 from .dependencies import get_db_path, get_uploads_dir, open_db
-from .schemas import SourceDocumentResponse
+from .routes import build_report_detail
+from .schemas import ReportDetailResponse, SourceDocumentResponse
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -89,3 +90,19 @@ def upload_source_document(
         return sources.add_source(
             conn, report_id, file_id, original_name, cleaned_text
         )
+
+
+@router.post("/{report_id}/generate", response_model=ReportDetailResponse)
+def generate_report(
+    report_id: str, db_path: Path = Depends(get_db_path)
+) -> Dict[str, Any]:
+    """Draft content for every field the user has not edited.
+
+    Exactly one Claude call is made per trigger, covering all draftable fields
+    at once. A field the user has edited is neither sent nor overwritten, so
+    re-triggering after a later meeting costs tokens only for the fields still
+    untouched.
+    """
+    with open_db(db_path) as conn:
+        generation.generate_report_content(conn, report_id)
+        return build_report_detail(conn, report_id)
