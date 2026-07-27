@@ -4,6 +4,7 @@ from typing import AsyncIterator
 from fastapi import FastAPI
 
 from .db import init_db
+from .reports import register_exception_handlers, router as reports_router
 
 
 @asynccontextmanager
@@ -20,6 +21,9 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Progress Report API", lifespan=lifespan)
+
+register_exception_handlers(app)
+app.include_router(reports_router)
 
 
 @app.get("/health")
