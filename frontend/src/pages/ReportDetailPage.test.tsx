@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from '../api/client'
 import * as reportsApi from '../api/reports'
+import type { ReportField } from '../api/types'
 import { makeField, makeReport } from '../test/fixtures'
 import { ReportDetailPage } from './ReportDetailPage'
 
@@ -114,5 +115,95 @@ describe('ReportDetailPage', () => {
     expect(
       screen.getAllByTestId('field-label').map((node) => node.textContent),
     ).toEqual(['Summary', 'Blockers'])
+  })
+
+  it('keeps both fields updated when a later save resolves before an earlier one', async () => {
+    // Regression test for the lost-update race: each ReportFieldCard's
+    // onSaved used to close over the `report` value from its own render. If
+    // field A's save is started, then field B's save is started before A's
+    // PATCH resolves, and B's promise resolves first, A's eventual
+    // resolution would overwrite state built from a report that pre-dates
+    // B's edit -- silently reverting B in the UI even though the server
+    // still has B's correct value.
+    const user = userEvent.setup()
+    vi.spyOn(reportsApi, 'getReport').mockResolvedValue(
+      makeReport({
+        fields: [
+          makeField('f1', 'Summary', { content: 'Original summary.', sort_order: 0 }),
+          makeField('f2', 'Blockers', { content: 'Original blockers.', sort_order: 1 }),
+        ],
+      }),
+    )
+
+    let resolveF1: (field: ReportField) => void = () => {}
+    let resolveF2: (field: ReportField) => void = () => {}
+    vi.spyOn(reportsApi, 'updateFieldContent').mockImplementation((_reportId, fieldId) => {
+      if (fieldId === 'f1') {
+        return new Promise<ReportField>((resolve) => {
+          resolveF1 = resolve
+        })
+      }
+      return new Promise<ReportField>((resolve) => {
+        resolveF2 = resolve
+      })
+    })
+
+    renderDetailPage()
+    await screen.findByRole('heading', { name: 'Kickoff' })
+
+    // Scope each Save button to its own field's <li>, because field A's
+    // button relabels to "Saving..." once its save is in flight -- an
+    // unscoped `getAllByRole('button', { name: 'Save' })[1]` would then
+    // silently point at the wrong element (or nothing).
+    const [summaryContainer, blockersContainer] = screen
+      .getAllByTestId('field-label')
+      .map((label) => label.closest('li') as HTMLElement)
+
+    // Start saving field A (Summary) first...
+    await user.type(screen.getByLabelText('Summary content'), ' A-edit')
+    await user.click(within(summaryContainer).getByRole('button', { name: 'Save' }))
+
+    // ...then start saving field B (Blockers) before A's PATCH resolves.
+    await user.type(screen.getByLabelText('Blockers content'), ' B-edit')
+    await user.click(within(blockersContainer).getByRole('button', { name: 'Save' }))
+
+    // B's save resolves first (out of order). Assert on the "Edited by you"
+    // badge, which only appears once the server's is_user_edited field flows
+    // through onSaved/setReport -- unlike the textarea's value, it cannot be
+    // faked by what the user merely typed, so it is a true signal that B's
+    // save was actually applied to report state.
+    await act(async () => {
+      resolveF2(
+        makeField('f2', 'Blockers', {
+          content: 'Original blockers. B-edit',
+          sort_order: 1,
+          is_user_edited: true,
+        }),
+      )
+    })
+    await waitFor(() => {
+      expect(within(blockersContainer).getByText('Edited by you')).toBeInTheDocument()
+    })
+
+    // A's save resolves after. It must not revert B's already-applied edit.
+    await act(async () => {
+      resolveF1(
+        makeField('f1', 'Summary', {
+          content: 'Original summary. A-edit',
+          sort_order: 0,
+          is_user_edited: true,
+        }),
+      )
+    })
+    await waitFor(() => {
+      expect(within(summaryContainer).getByText('Edited by you')).toBeInTheDocument()
+    })
+
+    // The lost-update bug would have reverted B to its pre-save state
+    // (is_user_edited: false) when A's stale-closure save landed.
+    expect(within(blockersContainer).getByText('Edited by you')).toBeInTheDocument()
+    expect(screen.getByLabelText('Blockers content')).toHaveValue(
+      'Original blockers. B-edit',
+    )
   })
 })

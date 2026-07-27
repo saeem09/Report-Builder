@@ -69,7 +69,9 @@ export function ReportDetailPage() {
                   <ReportFieldCard
                     reportId={report.id}
                     field={field}
-                    onSaved={(saved) => setReport(replaceField(report, saved))}
+                    onSaved={(saved) =>
+                      setReport((prev) => (prev === null ? prev : replaceField(prev, saved)))
+                    }
                   />
                 </li>
               ))}

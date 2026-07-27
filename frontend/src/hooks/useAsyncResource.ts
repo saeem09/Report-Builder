@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
 
 export type AsyncStatus = 'loading' | 'ready' | 'error'
 
@@ -12,8 +13,17 @@ export type AsyncResource<T> = {
    * Replace the data without a request. This is the main path after a
    * mutation: the API returns the authoritative object, so refetching it would
    * be a second round trip for an answer already in hand.
+   *
+   * Accepts either a plain value or a `(prev) => next` updater, matching
+   * React's own useState setter overload. When a caller derives the next
+   * value from the current one -- e.g. replacing one field inside a larger
+   * object -- the updater form must be used instead of closing over a value
+   * from the render that scheduled the mutation. Two mutations started close
+   * together (e.g. two independent saves) can otherwise both close over the
+   * same pre-mutation snapshot; whichever resolves last then silently
+   * reverts the other's already-applied change.
    */
-  setData: (next: T) => void
+  setData: Dispatch<SetStateAction<T | null>>
 }
 
 /**

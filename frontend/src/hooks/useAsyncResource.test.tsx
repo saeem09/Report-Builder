@@ -24,6 +24,9 @@ function Harness({ load }: Harness) {
       <button type="button" onClick={() => setData('local')}>
         Set local
       </button>
+      <button type="button" onClick={() => setData((prev) => `${prev ?? 'none'}-appended`)}>
+        Set functional
+      </button>
     </div>
   )
 }
@@ -106,6 +109,22 @@ describe('useAsyncResource', () => {
 
     expect(screen.getByTestId('data')).toHaveTextContent('local')
     expect(load).toHaveBeenCalledTimes(callsAfterLoad)
+  })
+
+  it('setData accepts an updater function and receives the current state', async () => {
+    const user = userEvent.setup()
+    renderHarness(() => Promise.resolve('first'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('status')).toHaveTextContent('ready')
+    })
+
+    // Matches React's own useState setter overload: setData can take either a
+    // plain value or a (prev) => next updater. This is the form callers need
+    // when a save's callback must not close over a stale copy of the state.
+    await user.click(screen.getByRole('button', { name: 'Set functional' }))
+
+    expect(screen.getByTestId('data')).toHaveTextContent('first-appended')
   })
 
   it('does not throw when a fetch resolves after unmount', async () => {
