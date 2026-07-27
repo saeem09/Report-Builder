@@ -39,6 +39,9 @@ UNSUPPORTED_LOGO_MESSAGE = (
 MISSING_LOGO_FILE_MESSAGE = (
     "The report's logo file is missing from storage. Upload the logo again."
 )
+INVALID_FILENAME_MESSAGE = (
+    "The uploaded file's name is not valid. Please rename it and try again."
+)
 
 
 def read_upload(file: UploadFile) -> bytes:
@@ -71,6 +74,23 @@ def _require_filename(file: UploadFile) -> str:
     return original_name
 
 
+def _save_or_reject(content: bytes, original_name: str, uploads_dir: Path) -> str:
+    """Save an upload, converting storage's filename ValueError into a 400.
+
+    save_file's sanitizer raises a bare ValueError when a name collapses to
+    "", ".", or ".." (e.g. a filename of literally "." or ".."). That is not
+    one of the domain exceptions exception_handlers.py maps to a status code,
+    so it must be caught here at the route boundary instead of propagating
+    into an unhandled 500.
+    """
+    try:
+        return save_file(content, original_name, uploads_dir=uploads_dir)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=INVALID_FILENAME_MESSAGE
+        ) from error
+
+
 @router.post(
     "/{report_id}/documents",
     status_code=status.HTTP_201_CREATED,
@@ -96,7 +116,7 @@ def upload_source_document(
     content_type = file.content_type or DEFAULT_CONTENT_TYPE
     with open_db(db_path) as conn:
         repository.require_report(conn, report_id)
-        file_id = save_file(content, original_name, uploads_dir=uploads_dir)
+        file_id = _save_or_reject(content, original_name, uploads_dir)
         sources.record_file(conn, file_id, original_name, content_type)
         return sources.add_source(
             conn, report_id, file_id, original_name, cleaned_text
@@ -144,7 +164,7 @@ def upload_report_logo(
     content = read_upload(file)
     with open_db(db_path) as conn:
         repository.require_report(conn, report_id)
-        file_id = save_file(content, original_name, uploads_dir=uploads_dir)
+        file_id = _save_or_reject(content, original_name, uploads_dir)
         sources.record_file(conn, file_id, original_name, content_type)
         repository.set_report_logo(conn, report_id, file_id)
         return build_report_detail(conn, report_id)

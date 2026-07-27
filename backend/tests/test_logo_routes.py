@@ -154,3 +154,13 @@ def test_upload_logo_does_not_orphan_a_file_for_an_unknown_report(client_and_db)
 
 def test_upload_logo_rejects_a_missing_file_part(client):
     assert client.put(logo_url(create_report(client)["id"])).status_code == 422
+
+
+@pytest.mark.parametrize("name", [".", ".."])
+def test_upload_logo_rejects_a_filename_that_sanitizes_to_a_bare_dot(client, name):
+    report = create_report(client)
+
+    response = put_logo(client, report["id"], name)
+
+    assert response.status_code == 400
+    assert "name" in response.json()["detail"].lower()
