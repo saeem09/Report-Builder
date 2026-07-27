@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { ReportDetail, ReportField } from '../api/types'
-import { appendField, removeField, replaceField } from './reportState'
+import { appendField, removeField, replaceField, withFieldOrder } from './reportState'
 
 function field(id: string, sortOrder: number, content = ''): ReportField {
   return {
@@ -100,5 +100,42 @@ describe('removeField', () => {
     const result = removeField(report([field('f1', 0)]), 'ghost')
 
     expect(result.fields.map((item) => item.id)).toEqual(['f1'])
+  })
+})
+
+describe('withFieldOrder', () => {
+  it('reorders the fields to match the id list', () => {
+    const original = report([field('f1', 0), field('f2', 1), field('f3', 2)])
+
+    const result = withFieldOrder(original, ['f3', 'f1', 'f2'])
+
+    expect(result.fields.map((item) => item.id)).toEqual(['f3', 'f1', 'f2'])
+  })
+
+  it('rewrites sort_order to the new index', () => {
+    const original = report([field('f1', 0), field('f2', 1)])
+
+    const result = withFieldOrder(original, ['f2', 'f1'])
+
+    expect(result.fields.map((item) => item.sort_order)).toEqual([0, 1])
+    expect(result.fields[0].id).toBe('f2')
+  })
+
+  it('does not mutate the original report or any of its fields', () => {
+    const original = report([field('f1', 0), field('f2', 1)])
+
+    withFieldOrder(original, ['f2', 'f1'])
+
+    expect(original.fields.map((item) => item.id)).toEqual(['f1', 'f2'])
+    expect(original.fields[0].sort_order).toBe(0)
+  })
+
+  it('drops an id that does not name a field', () => {
+    const original = report([field('f1', 0)])
+
+    const result = withFieldOrder(original, ['ghost', 'f1'])
+
+    expect(result.fields.map((item) => item.id)).toEqual(['f1'])
+    expect(result.fields[0].sort_order).toBe(0)
   })
 })

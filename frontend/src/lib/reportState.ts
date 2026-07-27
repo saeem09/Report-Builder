@@ -32,3 +32,22 @@ export function removeField(report: ReportDetail, fieldId: string): ReportDetail
     fields: report.fields.filter((existing) => existing.id !== fieldId),
   }
 }
+
+/**
+ * Apply a new field id order optimistically, before the server confirms it.
+ *
+ * sort_order is rewritten to each field's new index so the local object is
+ * internally consistent; the server's response then replaces this value
+ * entirely, so a divergence lasts only as long as one request.
+ */
+export function withFieldOrder(
+  report: ReportDetail,
+  fieldIds: readonly string[],
+): ReportDetail {
+  const byId = new Map(report.fields.map((field) => [field.id, field]))
+  const ordered = fieldIds
+    .map((fieldId) => byId.get(fieldId))
+    .filter((field): field is ReportField => field !== undefined)
+    .map((field, index) => ({ ...field, sort_order: index }))
+  return { ...report, fields: ordered }
+}

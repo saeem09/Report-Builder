@@ -251,4 +251,69 @@ describe('ReportDetailPage', () => {
       ).toEqual(['Blockers'])
     })
   })
+
+  it('persists a reorder and shows the server order', async () => {
+    vi.spyOn(reportsApi, 'getReport').mockResolvedValue(
+      makeReport({
+        fields: [
+          makeField('f1', 'Summary', { sort_order: 0 }),
+          makeField('f2', 'Blockers', { sort_order: 1 }),
+        ],
+      }),
+    )
+    const reorder = vi.spyOn(reportsApi, 'reorderFields').mockResolvedValue(
+      makeReport({
+        fields: [
+          makeField('f2', 'Blockers', { sort_order: 0 }),
+          makeField('f1', 'Summary', { sort_order: 1 }),
+        ],
+      }),
+    )
+    renderDetailPage()
+
+    await screen.findByRole('heading', { name: 'Kickoff' })
+    // The drag itself cannot run under jsdom, so the page's reorder callback is
+    // exercised through the same path the drop would take.
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('test:reorder', { detail: ['f2', 'f1'] }),
+      )
+    })
+
+    await waitFor(() => {
+      expect(reorder).toHaveBeenCalledWith('r1', ['f2', 'f1'])
+    })
+    expect(
+      screen.getAllByTestId('field-label').map((node) => node.textContent),
+    ).toEqual(['Blockers', 'Summary'])
+  })
+
+  it('rolls the order back when the server rejects the reorder', async () => {
+    vi.spyOn(reportsApi, 'getReport').mockResolvedValue(
+      makeReport({
+        fields: [
+          makeField('f1', 'Summary', { sort_order: 0 }),
+          makeField('f2', 'Blockers', { sort_order: 1 }),
+        ],
+      }),
+    )
+    vi.spyOn(reportsApi, 'reorderFields').mockRejectedValue(
+      new ApiError(400, 'order mismatch'),
+    )
+    renderDetailPage()
+
+    await screen.findByRole('heading', { name: 'Kickoff' })
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('test:reorder', { detail: ['f2', 'f1'] }),
+      )
+    })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'That request was rejected. Check the file or the values you entered.',
+    )
+    expect(
+      screen.getAllByTestId('field-label').map((node) => node.textContent),
+    ).toEqual(['Summary', 'Blockers'])
+  })
 })
