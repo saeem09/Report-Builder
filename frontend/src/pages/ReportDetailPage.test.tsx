@@ -316,4 +316,32 @@ describe('ReportDetailPage', () => {
       screen.getAllByTestId('field-label').map((node) => node.textContent),
     ).toEqual(['Summary', 'Blockers'])
   })
+
+  it('replaces the whole report with the generated one', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(reportsApi, 'getReport').mockResolvedValue(
+      makeReport({ fields: [makeField('f1', 'Summary', { sort_order: 0 })] }),
+    )
+    vi.spyOn(reportsApi, 'generateReport').mockResolvedValue(
+      makeReport({
+        fields: [
+          makeField('f1', 'Summary', {
+            content: 'The team shipped the parser.',
+            sort_order: 0,
+          }),
+        ],
+      }),
+    )
+    renderDetailPage()
+
+    await screen.findByRole('heading', { name: 'Kickoff' })
+    await user.click(screen.getByRole('button', { name: 'Generate content with AI' }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Summary content')).toHaveValue(
+        'The team shipped the parser.',
+      )
+    })
+    expect(screen.getByText('AI draft')).toBeInTheDocument()
+  })
 })

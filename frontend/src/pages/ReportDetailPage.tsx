@@ -7,6 +7,7 @@ import type { ReportDetail } from '../api/types'
 import { AddFieldForm } from '../components/reports/AddFieldForm'
 import { ReportFieldCard } from '../components/reports/ReportFieldCard'
 import { SortableFieldList } from '../components/reports/SortableFieldList'
+import { SourceDocumentPanel } from '../components/reports/SourceDocumentPanel'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { useAsyncResource } from '../hooks/useAsyncResource'
 import { appendField, removeField, replaceField, withFieldOrder } from '../lib/reportState'
@@ -117,6 +118,11 @@ export function ReportDetailPage() {
               Updated {formatTimestamp(report.updated_at)}
             </p>
           </div>
+
+          <SourceDocumentPanel
+            reportId={report.id}
+            onGenerated={(generated) => setReport(generated)}
+          />
 
           {report.fields.length === 0 ? (
             <p>This report has no fields yet.</p>
