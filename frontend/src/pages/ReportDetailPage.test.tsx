@@ -344,4 +344,55 @@ describe('ReportDetailPage', () => {
     })
     expect(screen.getByText('AI draft')).toBeInTheDocument()
   })
+
+  it('renders the logo upload panel for a loaded report', async () => {
+    vi.spyOn(reportsApi, 'getReport').mockResolvedValue(makeReport())
+    renderDetailPage()
+
+    await screen.findByRole('heading', { name: 'Kickoff' })
+    expect(
+      screen.getByRole('heading', { name: 'Company logo' }),
+    ).toBeInTheDocument()
+  })
+
+  it('returns to the reports list after the report is deleted', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(reportsApi, 'getReport').mockResolvedValue(makeReport())
+    vi.spyOn(reportsApi, 'deleteReport').mockResolvedValue(undefined)
+
+    render(
+      <MemoryRouter initialEntries={['/reports/r1']}>
+        <Routes>
+          <Route path="/reports" element={<p>Reports list</p>} />
+          <Route path="/reports/:reportId" element={<ReportDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Kickoff' })
+    await user.click(screen.getByRole('button', { name: 'Delete report' }))
+    await user.click(screen.getByRole('button', { name: 'Delete report permanently' }))
+
+    expect(await screen.findByText('Reports list')).toBeInTheDocument()
+  })
+
+  it('shows the renamed report without a refetch', async () => {
+    const user = userEvent.setup()
+    const get = vi.spyOn(reportsApi, 'getReport').mockResolvedValue(makeReport())
+    vi.spyOn(reportsApi, 'renameReport').mockResolvedValue(
+      makeReport({ name: 'Kickoff v2' }),
+    )
+    renderDetailPage()
+
+    await screen.findByRole('heading', { name: 'Kickoff' })
+    const callsAfterLoad = get.mock.calls.length
+
+    await user.click(screen.getByRole('button', { name: 'Rename' }))
+    await user.clear(screen.getByLabelText('Report name'))
+    await user.type(screen.getByLabelText('Report name'), 'Kickoff v2')
+    await user.click(screen.getByRole('button', { name: 'Save name' }))
+
+    expect(await screen.findByRole('heading', { name: 'Kickoff v2' })).toBeInTheDocument()
+    expect(get).toHaveBeenCalledTimes(callsAfterLoad)
+  })
 })

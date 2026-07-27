@@ -1,22 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { getReport, reorderFields } from '../api/reports'
 import type { ReportDetail } from '../api/types'
 import { AddFieldForm } from '../components/reports/AddFieldForm'
 import { LogoUploadPanel } from '../components/reports/LogoUploadPanel'
 import { ReportFieldCard } from '../components/reports/ReportFieldCard'
+import { ReportHeader } from '../components/reports/ReportHeader'
 import { SortableFieldList } from '../components/reports/SortableFieldList'
 import { SourceDocumentPanel } from '../components/reports/SourceDocumentPanel'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { useAsyncResource } from '../hooks/useAsyncResource'
 import { appendField, removeField, replaceField, withFieldOrder } from '../lib/reportState'
-
-function formatTimestamp(isoTimestamp: string): string {
-  const parsed = new Date(isoTimestamp)
-  return Number.isNaN(parsed.getTime()) ? isoTimestamp : parsed.toLocaleString()
-}
 
 /**
  * The editor workspace. This component owns the single ReportDetail for the
@@ -26,6 +22,7 @@ function formatTimestamp(isoTimestamp: string): string {
  */
 export function ReportDetailPage() {
   const { reportId = '' } = useParams<{ reportId: string }>()
+  const navigate = useNavigate()
   // useCallback is mandatory: useAsyncResource treats load as an effect
   // dependency, so an inline arrow would refetch forever.
   const load = useCallback(() => getReport(reportId), [reportId])
@@ -113,12 +110,13 @@ export function ReportDetailPage() {
 
       {status === 'ready' && report !== null ? (
         <div className="mt-2 flex flex-col gap-6">
-          <div>
-            <h2 className="text-xl font-semibold text-navy-deep">{report.name}</h2>
-            <p className="text-sm text-grey-mid">
-              Updated {formatTimestamp(report.updated_at)}
-            </p>
-          </div>
+          <ReportHeader
+            report={report}
+            onRenamed={(renamed) => setReport(renamed)}
+            onDeleted={() => {
+              void navigate('/reports')
+            }}
+          />
 
           <SourceDocumentPanel
             reportId={report.id}
