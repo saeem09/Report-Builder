@@ -8,9 +8,16 @@ import type { ReportField } from '../../api/types'
 import { makeField } from '../../test/fixtures'
 import { ReportFieldCard } from './ReportFieldCard'
 
-function renderCard(field: ReportField, onSaved = vi.fn()) {
-  render(<ReportFieldCard reportId="r1" field={field} onSaved={onSaved} />)
-  return onSaved
+function renderCard(field: ReportField, onSaved = vi.fn(), onDeleted = vi.fn()) {
+  render(
+    <ReportFieldCard
+      reportId="r1"
+      field={field}
+      onSaved={onSaved}
+      onDeleted={onDeleted}
+    />,
+  )
+  return { onSaved, onDeleted }
 }
 
 describe('ReportFieldCard', () => {
@@ -79,7 +86,7 @@ describe('ReportFieldCard', () => {
       is_user_edited: true,
     })
     const update = vi.spyOn(reportsApi, 'updateFieldContent').mockResolvedValue(saved)
-    const onSaved = renderCard(makeField('f1', 'Summary'))
+    const { onSaved } = renderCard(makeField('f1', 'Summary'))
 
     await user.type(screen.getByLabelText('Summary content'), 'Mine.')
     await user.click(screen.getByRole('button', { name: 'Save' }))
@@ -117,7 +124,7 @@ describe('ReportFieldCard', () => {
     vi.spyOn(reportsApi, 'updateFieldContent').mockRejectedValue(
       new ApiError(404, 'gone'),
     )
-    const onSaved = renderCard(makeField('f1', 'Summary'))
+    const { onSaved } = renderCard(makeField('f1', 'Summary'))
 
     await user.type(screen.getByLabelText('Summary content'), 'Mine.')
     await user.click(screen.getByRole('button', { name: 'Save' }))
@@ -136,5 +143,58 @@ describe('ReportFieldCard', () => {
       'maxLength',
       '50000',
     )
+  })
+
+  it('asks for confirmation before deleting', async () => {
+    const user = userEvent.setup()
+    const remove = vi.spyOn(reportsApi, 'deleteField')
+    renderCard(makeField('f1', 'Summary'))
+
+    await user.click(screen.getByRole('button', { name: 'Delete field' }))
+
+    expect(screen.getByRole('dialog')).toHaveAccessibleName('Delete this field')
+    expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('deletes the field and hands its id up when confirmed', async () => {
+    const user = userEvent.setup()
+    const remove = vi.spyOn(reportsApi, 'deleteField').mockResolvedValue(undefined)
+    const { onDeleted } = renderCard(makeField('f1', 'Summary'))
+
+    await user.click(screen.getByRole('button', { name: 'Delete field' }))
+    await user.click(screen.getByRole('button', { name: 'Delete field permanently' }))
+
+    await waitFor(() => {
+      expect(remove).toHaveBeenCalledWith('r1', 'f1')
+    })
+    expect(onDeleted).toHaveBeenCalledWith('f1')
+  })
+
+  it('does not delete when the confirmation is cancelled', async () => {
+    const user = userEvent.setup()
+    const remove = vi.spyOn(reportsApi, 'deleteField')
+    const { onDeleted } = renderCard(makeField('f1', 'Summary'))
+
+    await user.click(screen.getByRole('button', { name: 'Delete field' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(remove).not.toHaveBeenCalled()
+    expect(onDeleted).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a delete failure and closes the dialog', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(reportsApi, 'deleteField').mockRejectedValue(new ApiError(404, 'gone'))
+    const { onDeleted } = renderCard(makeField('f1', 'Summary'))
+
+    await user.click(screen.getByRole('button', { name: 'Delete field' }))
+    await user.click(screen.getByRole('button', { name: 'Delete field permanently' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'That report or field no longer exists. Return to the reports list.',
+    )
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(onDeleted).not.toHaveBeenCalled()
   })
 })

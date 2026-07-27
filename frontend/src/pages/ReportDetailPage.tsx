@@ -3,10 +3,11 @@ import { Link, useParams } from 'react-router-dom'
 
 import { getReport } from '../api/reports'
 import type { ReportDetail } from '../api/types'
+import { AddFieldForm } from '../components/reports/AddFieldForm'
 import { ReportFieldCard } from '../components/reports/ReportFieldCard'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { useAsyncResource } from '../hooks/useAsyncResource'
-import { replaceField } from '../lib/reportState'
+import { appendField, removeField, replaceField } from '../lib/reportState'
 
 function formatTimestamp(isoTimestamp: string): string {
   const parsed = new Date(isoTimestamp)
@@ -70,13 +71,27 @@ export function ReportDetailPage() {
                     reportId={report.id}
                     field={field}
                     onSaved={(saved) =>
-                      setReport((prev) => (prev === null ? prev : replaceField(prev, saved)))
+                      setReport((prev) =>
+                        prev === null ? prev : replaceField(prev, saved),
+                      )
+                    }
+                    onDeleted={(fieldId) =>
+                      setReport((prev) =>
+                        prev === null ? prev : removeField(prev, fieldId),
+                      )
                     }
                   />
                 </li>
               ))}
             </ul>
           )}
+
+          <AddFieldForm
+            reportId={report.id}
+            onAdded={(added) =>
+              setReport((prev) => (prev === null ? prev : appendField(prev, added)))
+            }
+          />
         </div>
       ) : null}
     </section>

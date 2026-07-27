@@ -206,4 +206,49 @@ describe('ReportDetailPage', () => {
       'Original blockers. B-edit',
     )
   })
+
+  it('appends a newly added field to the list', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(reportsApi, 'getReport').mockResolvedValue(
+      makeReport({ fields: [makeField('f1', 'Summary', { sort_order: 0 })] }),
+    )
+    vi.spyOn(reportsApi, 'addField').mockResolvedValue(
+      makeField('f2', 'Blockers', { sort_order: 1 }),
+    )
+    renderDetailPage()
+
+    await screen.findByRole('heading', { name: 'Kickoff' })
+    await user.type(screen.getByLabelText('New field label'), 'Blockers')
+    await user.click(screen.getByRole('button', { name: 'Add field' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByTestId('field-label').map((node) => node.textContent),
+      ).toEqual(['Summary', 'Blockers'])
+    })
+  })
+
+  it('removes a deleted field from the list', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(reportsApi, 'getReport').mockResolvedValue(
+      makeReport({
+        fields: [
+          makeField('f1', 'Summary', { sort_order: 0 }),
+          makeField('f2', 'Blockers', { sort_order: 1 }),
+        ],
+      }),
+    )
+    vi.spyOn(reportsApi, 'deleteField').mockResolvedValue(undefined)
+    renderDetailPage()
+
+    await screen.findByRole('heading', { name: 'Kickoff' })
+    await user.click(screen.getAllByRole('button', { name: 'Delete field' })[0])
+    await user.click(screen.getByRole('button', { name: 'Delete field permanently' }))
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByTestId('field-label').map((node) => node.textContent),
+      ).toEqual(['Blockers'])
+    })
+  })
 })

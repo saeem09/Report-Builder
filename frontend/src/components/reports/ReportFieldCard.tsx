@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 
-import { updateFieldContent } from '../../api/reports'
+import { deleteField, updateFieldContent } from '../../api/reports'
 import type { ReportField } from '../../api/types'
 import { Button } from '../ui/Button'
+import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { ErrorBanner } from '../ui/ErrorBanner'
 import { TextArea } from '../ui/TextArea'
 
@@ -36,6 +37,7 @@ type ReportFieldCardProps = {
   reportId: string
   field: ReportField
   onSaved: (field: ReportField) => void
+  onDeleted: (fieldId: string) => void
 }
 
 /**
@@ -47,9 +49,16 @@ type ReportFieldCardProps = {
  * and quietly remove the field from AI drafting forever. The Save button is
  * what makes taking ownership of a field a decision rather than an accident.
  */
-export function ReportFieldCard({ reportId, field, onSaved }: ReportFieldCardProps) {
+export function ReportFieldCard({
+  reportId,
+  field,
+  onSaved,
+  onDeleted,
+}: ReportFieldCardProps) {
   const [draft, setDraft] = useState(field.content)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
   const [error, setError] = useState<unknown>(null)
 
   // Re-sync when the server replaces this field's content, which happens after
@@ -74,6 +83,22 @@ export function ReportFieldCard({ reportId, field, onSaved }: ReportFieldCardPro
     }
   }
 
+  async function handleConfirmDelete() {
+    // The dialog closes first so the error banner, if any, is not hidden
+    // behind the overlay.
+    setIsConfirmingDelete(false)
+    setIsDeleting(true)
+    setError(null)
+    try {
+      await deleteField(reportId, field.id)
+      onDeleted(field.id)
+    } catch (caught: unknown) {
+      setError(caught)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   return (
     <div className="flex-1 p-4">
       <div className="flex items-center justify-between gap-3">
@@ -91,7 +116,7 @@ export function ReportFieldCard({ reportId, field, onSaved }: ReportFieldCardPro
         maxLength={MAX_CONTENT_LENGTH}
       />
 
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <Button onClick={() => void handleSave()} disabled={!isDirty || isSaving}>
           {isSaving ? 'Saving...' : 'Save'}
         </Button>
@@ -102,6 +127,13 @@ export function ReportFieldCard({ reportId, field, onSaved }: ReportFieldCardPro
         >
           Revert
         </Button>
+        <Button
+          variant="danger"
+          onClick={() => setIsConfirmingDelete(true)}
+          disabled={isDeleting}
+        >
+          {isDeleting ? 'Deleting...' : 'Delete field'}
+        </Button>
         {isDirty ? (
           <span className="text-sm text-grey-mid">Unsaved changes</span>
         ) : null}
@@ -110,6 +142,16 @@ export function ReportFieldCard({ reportId, field, onSaved }: ReportFieldCardPro
       <div className="mt-3">
         <ErrorBanner error={error} onDismiss={() => setError(null)} />
       </div>
+
+      {isConfirmingDelete ? (
+        <ConfirmDialog
+          title="Delete this field"
+          message={`"${field.label}" and its content will be removed from this report. This cannot be undone.`}
+          confirmLabel="Delete field permanently"
+          onConfirm={() => void handleConfirmDelete()}
+          onCancel={() => setIsConfirmingDelete(false)}
+        />
+      ) : null}
     </div>
   )
 }
