@@ -28,6 +28,12 @@ TOO_LARGE_MESSAGE = "The uploaded file exceeds the {0} byte limit.".format(
     MAX_UPLOAD_BYTES
 )
 DEFAULT_CONTENT_TYPE = "application/octet-stream"
+ALLOWED_LOGO_CONTENT_TYPES = ("image/png", "image/jpeg", "image/gif", "image/webp")
+UNSUPPORTED_LOGO_MESSAGE = (
+    "The logo must be an image. Allowed types: {0}.".format(
+        ", ".join(ALLOWED_LOGO_CONTENT_TYPES)
+    )
+)
 
 
 def read_upload(file: UploadFile) -> bytes:
@@ -105,4 +111,35 @@ def generate_report(
     """
     with open_db(db_path) as conn:
         generation.generate_report_content(conn, report_id)
+        return build_report_detail(conn, report_id)
+
+
+@router.put("/{report_id}/logo", response_model=ReportDetailResponse)
+def upload_report_logo(
+    report_id: str,
+    file: UploadFile = File(...),
+    db_path: Path = Depends(get_db_path),
+    uploads_dir: Path = Depends(get_uploads_dir),
+) -> Dict[str, Any]:
+    """Set the company logo that appears on the exported PDF.
+
+    PUT rather than POST because a report has at most one logo, so uploading
+    again simply replaces it and the operation is idempotent. The content type
+    is checked against an allowlist before anything is written; the previous
+    logo file is left on disk rather than deleted, so an export that is
+    mid-flight cannot lose its image.
+    """
+    original_name = _require_filename(file)
+    content_type = file.content_type or DEFAULT_CONTENT_TYPE
+    if content_type not in ALLOWED_LOGO_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=UNSUPPORTED_LOGO_MESSAGE,
+        )
+    content = read_upload(file)
+    with open_db(db_path) as conn:
+        repository.require_report(conn, report_id)
+        file_id = save_file(content, original_name, uploads_dir=uploads_dir)
+        sources.record_file(conn, file_id, original_name, content_type)
+        repository.set_report_logo(conn, report_id, file_id)
         return build_report_detail(conn, report_id)
