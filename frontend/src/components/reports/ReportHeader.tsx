@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { deleteReport, exportReportPdf, renameReport } from '../../api/reports'
 import type { ReportDetail } from '../../api/types'
 import { filenameFromContentDisposition, triggerBlobDownload } from '../../lib/download'
+import { formatTimestamp } from '../../lib/formatTimestamp'
 import { Button } from '../ui/Button'
 import { ConfirmDialog } from '../ui/ConfirmDialog'
 import { ErrorBanner } from '../ui/ErrorBanner'
@@ -11,11 +12,6 @@ import { TextInput } from '../ui/TextInput'
 // Mirrors MAX_NAME_LENGTH in backend/app/reports/schemas.py.
 const MAX_NAME_LENGTH = 200
 const FALLBACK_PDF_FILENAME = 'report.pdf'
-
-function formatTimestamp(isoTimestamp: string): string {
-  const parsed = new Date(isoTimestamp)
-  return Number.isNaN(parsed.getTime()) ? isoTimestamp : parsed.toLocaleString()
-}
 
 type ReportHeaderProps = {
   report: ReportDetail

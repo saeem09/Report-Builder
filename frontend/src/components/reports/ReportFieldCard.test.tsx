@@ -9,7 +9,7 @@ import { makeField } from '../../test/fixtures'
 import { ReportFieldCard } from './ReportFieldCard'
 
 function renderCard(field: ReportField, onSaved = vi.fn(), onDeleted = vi.fn()) {
-  render(
+  const view = render(
     <ReportFieldCard
       reportId="r1"
       field={field}
@@ -17,7 +17,7 @@ function renderCard(field: ReportField, onSaved = vi.fn(), onDeleted = vi.fn()) 
       onDeleted={onDeleted}
     />,
   )
-  return { onSaved, onDeleted }
+  return { onSaved, onDeleted, rerender: view.rerender }
 }
 
 describe('ReportFieldCard', () => {
@@ -134,6 +134,52 @@ describe('ReportFieldCard', () => {
     )
     expect(screen.getByLabelText('Summary content')).toHaveValue('Mine.')
     expect(onSaved).not.toHaveBeenCalled()
+  })
+
+  it('keeps an unsaved edit when field.content changes underneath it (e.g. generation resolving mid-edit)', async () => {
+    const user = userEvent.setup()
+    const field = makeField('f1', 'Summary', { content: 'Original.' })
+    const { rerender } = renderCard(field)
+
+    await user.type(screen.getByLabelText('Summary content'), ' typed by me')
+
+    // Simulate an unrelated mutation (AI generation) replacing the whole
+    // report and handing this card a new field.content prop, before the user
+    // has clicked Save.
+    const regenerated = makeField('f1', 'Summary', { content: 'AI regenerated content.' })
+    rerender(
+      <ReportFieldCard
+        reportId="r1"
+        field={regenerated}
+        onSaved={vi.fn()}
+        onDeleted={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByLabelText('Summary content')).toHaveValue(
+      'Original. typed by me',
+    )
+  })
+
+  it('adopts a new field.content prop when the draft is not dirty', () => {
+    const field = makeField('f1', 'Summary', { content: '' })
+    const { rerender } = renderCard(field)
+
+    // The user never touched this field, so draft still matches field.content.
+    // Generation drafting it for the first time should flow through.
+    const generated = makeField('f1', 'Summary', { content: 'AI drafted content.' })
+    rerender(
+      <ReportFieldCard
+        reportId="r1"
+        field={generated}
+        onSaved={vi.fn()}
+        onDeleted={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByLabelText('Summary content')).toHaveValue(
+      'AI drafted content.',
+    )
   })
 
   it('caps content at the server limit of 50000 characters', () => {

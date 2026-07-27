@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { deleteField, updateFieldContent } from '../../api/reports'
 import type { ReportField } from '../../api/types'
@@ -62,10 +62,21 @@ export function ReportFieldCard({
   const [error, setError] = useState<unknown>(null)
 
   // Re-sync when the server replaces this field's content, which happens after
-  // an AI generation run. Keyed on the saved content, so it never clobbers a
-  // draft the user is still typing unless the underlying field really changed.
+  // an AI generation run or this card's own save. lastSyncedContent tracks
+  // what draft was set to last time, so this only adopts the new value when
+  // the user hasn't typed anything since — an unrelated mutation (e.g.
+  // generation resolving while the user is mid-edit on this field) must never
+  // silently overwrite unsaved keystrokes. draftRef mirrors draft so the
+  // effect can read its latest value without depending on it, since a
+  // dependency on draft itself would make this fire on every keystroke.
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const lastSyncedContent = useRef(field.content)
   useEffect(() => {
-    setDraft(field.content)
+    if (draftRef.current === lastSyncedContent.current) {
+      setDraft(field.content)
+    }
+    lastSyncedContent.current = field.content
   }, [field.content])
 
   const isDirty = draft !== field.content

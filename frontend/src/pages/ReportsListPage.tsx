@@ -5,16 +5,7 @@ import { listReports } from '../api/reports'
 import type { ReportSummary } from '../api/types'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { useAsyncResource } from '../hooks/useAsyncResource'
-
-/**
- * Timestamps arrive as microsecond-precision UTC ISO strings. They are shown
- * in the reader's own locale because "when did I last touch this" is the only
- * question this column answers.
- */
-function formatTimestamp(isoTimestamp: string): string {
-  const parsed = new Date(isoTimestamp)
-  return Number.isNaN(parsed.getTime()) ? isoTimestamp : parsed.toLocaleString()
-}
+import { formatTimestamp } from '../lib/formatTimestamp'
 
 export function ReportsListPage() {
   // useCallback is mandatory here: useAsyncResource treats load as an effect
