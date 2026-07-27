@@ -5,15 +5,17 @@ convention allows, and so the plain CRUD surface stays readable on its own.
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 
 from ..parsers import parse_document
-from ..storage import save_file
+from ..storage import read_file, save_file
 from ..text_cleaning import clean_text
-from . import generation, repository, sources
+from . import fields as fields_repo
+from . import generation, pdf_export, repository, sources
 from .dependencies import get_db_path, get_uploads_dir, open_db
+from .errors import PdfExportError
 from .routes import build_report_detail
 from .schemas import ReportDetailResponse, SourceDocumentResponse
 
@@ -33,6 +35,9 @@ UNSUPPORTED_LOGO_MESSAGE = (
     "The logo must be an image. Allowed types: {0}.".format(
         ", ".join(ALLOWED_LOGO_CONTENT_TYPES)
     )
+)
+MISSING_LOGO_FILE_MESSAGE = (
+    "The report's logo file is missing from storage. Upload the logo again."
 )
 
 
@@ -143,3 +148,55 @@ def upload_report_logo(
         sources.record_file(conn, file_id, original_name, content_type)
         repository.set_report_logo(conn, report_id, file_id)
         return build_report_detail(conn, report_id)
+
+
+def _load_logo(conn, uploads_dir: Path, logo_file_id: Optional[str]):
+    """Read a report's logo bytes, or return (None, None) when it has no logo.
+
+    A logo id with no file behind it is reported as a PdfExportError rather
+    than being ignored: silently exporting a logo-less PDF would hide real data
+    loss from the user.
+    """
+    if not logo_file_id:
+        return None, None
+    record = sources.get_file_record(conn, logo_file_id)
+    if record is None:
+        raise PdfExportError(MISSING_LOGO_FILE_MESSAGE)
+    try:
+        logo_bytes = read_file(
+            logo_file_id, record["original_name"], uploads_dir=uploads_dir
+        )
+    except OSError as error:
+        raise PdfExportError(MISSING_LOGO_FILE_MESSAGE) from error
+    return logo_bytes, record["content_type"]
+
+
+@router.get("/{report_id}/export.pdf")
+def export_report_pdf(
+    report_id: str,
+    db_path: Path = Depends(get_db_path),
+    uploads_dir: Path = Depends(get_uploads_dir),
+) -> Response:
+    """Render a report to a downloadable PDF, logo included.
+
+    Rendering is deterministic library work: no LLM call is made here, per the
+    token-cost rules in AGENTS.md.
+    """
+    with open_db(db_path) as conn:
+        report = repository.get_report(conn, report_id)
+        report_fields = fields_repo.list_fields(conn, report_id)
+        logo_bytes, logo_content_type = _load_logo(
+            conn, uploads_dir, report["logo_file_id"]
+        )
+    pdf_bytes = pdf_export.render_report_pdf(
+        report["name"], report_fields, logo_bytes, logo_content_type
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'attachment; filename="{0}"'.format(
+                pdf_export.build_pdf_filename(report["name"])
+            )
+        },
+    )
